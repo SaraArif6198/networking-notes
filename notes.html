@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Networking Notes</title>
+  <meta name="description" content="Interactive book-style viewer for networking notes" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700&family=Inter:wght@400;500;600&display=swap"
+    rel="stylesheet" />
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      height: 100%;
+    }
+
+    body {
+      height: 100%;
+      font-family: 'Inter', sans-serif;
+      background: #f5f0e8;
+      background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d4c9b5' fill-opacity='0.15'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      color: #3d3529;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    /* ── Soft ambient tones ─────────────────────────────── */
+    body::before {
+      content: '';
+      position: fixed;
+      top: -40%;
+      left: -20%;
+      width: 80vw;
+      height: 80vw;
+      background: radial-gradient(circle, rgba(194, 168, 120, .10) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    body::after {
+      content: '';
+      position: fixed;
+      bottom: -30%;
+      right: -10%;
+      width: 60vw;
+      height: 60vw;
+      background: radial-gradient(circle, rgba(160, 130, 90, .06) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Title Bar ─────────────────────────────────────── */
+    .title-bar {
+      position: relative;
+      z-index: 10;
+      text-align: center;
+      padding: 14px 20px 6px;
+      flex-shrink: 0;
+    }
+
+    .title-bar h1 {
+      font-family: 'Playfair Display', serif;
+      font-weight: 700;
+      font-size: clamp(1.1rem, 3vw, 1.6rem);
+      color: #5a4a35;
+      letter-spacing: .03em;
+    }
+
+    /* ── Book Wrapper ──────────────────────────────────── */
+    .book-scene {
+      position: relative;
+      z-index: 5;
+      flex: 1 1 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      perspective: 1800px;
+      width: 100%;
+      max-width: 1100px;
+      padding: 10px 8px;
+      min-height: 0;
+    }
+
+    .book {
+      position: relative;
+      transform-style: preserve-3d;
+    }
+
+    /* Spine shadow */
+    .book::before {
+      content: '';
+      position: absolute;
+      top: 5%;
+      bottom: 5%;
+      left: 50%;
+      width: 6px;
+      transform: translateX(-50%);
+      background: rgba(80, 60, 30, .25);
+      filter: blur(8px);
+      z-index: 100;
+      pointer-events: none;
+    }
+
+    /* ── Pages ─────────────────────────────────────────── */
+    .page {
+      position: absolute;
+      top: 0;
+      width: 50%;
+      height: 100%;
+      transform-style: preserve-3d;
+      transform-origin: left center;
+      transition: transform .8s cubic-bezier(.645, .045, .355, 1);
+      cursor: pointer;
+      left: 50%;
+    }
+
+    .page.flipped {
+      transform: rotateY(-180deg);
+    }
+
+    .page-face {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      backface-visibility: hidden;
+      border-radius: 0 8px 8px 0;
+      overflow: hidden;
+      background: #ebe5d9;
+      box-shadow: 2px 4px 20px rgba(80, 60, 30, .18);
+    }
+
+    .page-face img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+      background: #fff;
+    }
+
+    .page-front {
+      z-index: 1;
+    }
+
+    .page-back {
+      transform: rotateY(180deg);
+      border-radius: 8px 0 0 8px;
+    }
+
+    /* Page edge lighting */
+    .page-face::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      border-radius: inherit;
+    }
+
+    .page-front::after {
+      background: linear-gradient(to right, rgba(0, 0, 0, .08) 0%, transparent 15%);
+    }
+
+    .page-back::after {
+      background: linear-gradient(to left, rgba(0, 0, 0, .08) 0%, transparent 15%);
+    }
+
+    /* ── Cover (left static half when book is open) ───── */
+    .cover-left {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 50%;
+      height: 100%;
+      background: linear-gradient(145deg, #6b5340, #8a6d52);
+      border-radius: 8px 0 0 8px;
+      box-shadow: -3px 4px 18px rgba(80, 60, 30, .3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .cover-left-inner {
+      text-align: center;
+      padding: 20px;
+    }
+
+    .cover-left-inner .icon {
+      font-size: 2.5rem;
+      margin-bottom: 10px;
+    }
+
+    .cover-left-inner h2 {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(.9rem, 2.5vw, 1.3rem);
+      color: #f5efe6;
+    }
+
+    /* ── Title/Section pages ───────────────────────────── */
+    .section-title-face {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(160deg, #faf6ef, #ebe5d9);
+      text-align: center;
+      padding: 24px;
+    }
+
+    .section-title-face .section-heading {
+      font-family: 'Playfair Display', serif;
+      font-weight: 700;
+      font-size: clamp(1rem, 3vw, 1.6rem);
+      color: #5a4a35;
+      line-height: 1.35;
+      letter-spacing: .02em;
+    }
+
+    .section-title-face .section-divider {
+      width: 50px;
+      height: 3px;
+      background: linear-gradient(90deg, #c2a878, #8a6d52);
+      border-radius: 2px;
+      margin: 12px auto 0;
+    }
+
+    /* ── Controls ──────────────────────────────────────── */
+    .controls {
+      position: relative;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 10px 20px 18px;
+      flex-shrink: 0;
+    }
+
+    .btn {
+      background: #fff;
+      border: 1px solid #d4c9b5;
+      color: #5a4a35;
+      font-family: 'Inter', sans-serif;
+      font-size: .85rem;
+      font-weight: 500;
+      padding: 10px 22px;
+      border-radius: 50px;
+      cursor: pointer;
+      transition: all .25s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn:hover {
+      background: #f0e8d8;
+      border-color: #b09a7a;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(80, 60, 30, .12);
+    }
+
+    .btn:active {
+      transform: scale(.97);
+    }
+
+    .btn:disabled {
+      opacity: .3;
+      cursor: not-allowed;
+      transform: none !important;
+      box-shadow: none !important;
+    }
+
+    .page-indicator {
+      font-size: .8rem;
+      color: #8a7a65;
+      min-width: 80px;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ── Progress Dots ─────────────────────────────────── */
+    .progress-bar {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #d4c9b5;
+      transition: all .35s ease;
+      cursor: pointer;
+    }
+
+    .dot.active {
+      background: #8a6d52;
+      box-shadow: 0 0 6px rgba(138, 109, 82, .3);
+      transform: scale(1.3);
+    }
+
+    /* section dot markers */
+    .dot.section-marker {
+      border: 1.5px solid #8a6d52;
+      background: transparent;
+    }
+    .dot.section-marker.active {
+      background: #8a6d52;
+    }
+
+    /* ── Mobile (single-page mode) ─────────────────────── */
+    @media (max-width: 680px) {
+      .book-scene {
+        perspective: 1200px;
+      }
+
+      .cover-left {
+        display: none;
+      }
+
+      .book {
+        /* single page mode handled by JS */
+      }
+
+      .controls {
+        gap: 10px;
+        padding: 8px 12px 14px;
+      }
+
+      .btn {
+        padding: 8px 16px;
+        font-size: .78rem;
+      }
+
+      .page-indicator {
+        font-size: .72rem;
+        min-width: 60px;
+      }
+
+      .dot {
+        width: 5px;
+        height: 5px;
+      }
+
+      .progress-bar {
+        gap: 3px;
+      }
+    }
+
+    /* ── Loading Overlay ───────────────────────────────── */
+    .loader-overlay {
+      position: fixed;
+      inset: 0;
+      background: #f5f0e8;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      transition: opacity .5s ease;
+    }
+
+    .loader-overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .loader-spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid #d4c9b5;
+      border-top-color: #8a6d52;
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+
+    .loader-text {
+      margin-top: 14px;
+      font-size: .85rem;
+      color: #8a7a65;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* ── Swipe hint (mobile) ───────────────────────────── */
+    .swipe-hint {
+      display: none;
+      position: absolute;
+      bottom: 8px;
+      right: 16px;
+      font-size: .65rem;
+      color: #a0927e;
+      z-index: 10;
+      animation: fadeHint 3s ease-in-out forwards;
+    }
+
+    @media (max-width: 680px) {
+      .swipe-hint {
+        display: block;
+      }
+    }
+
+    @keyframes fadeHint {
+      0%,
+      70% {
+        opacity: 1;
+      }
+
+      100% {
+        opacity: 0;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- Loader -->
+  <div class="loader-overlay" id="loader">
+    <div class="loader-spinner"></div>
+    <div class="loader-text">Opening your notebook…</div>
+  </div>
+
+  <!-- Title -->
+  <div class="title-bar">
+    <h1>Networking Notes</h1>
+  </div>
+
+  <!-- Book -->
+  <div class="book-scene" id="bookScene">
+    <div class="book" id="book">
+      <!-- Cover left panel -->
+      <div class="cover-left">
+        <div class="cover-left-inner">
+          <div class="icon">📝</div>
+          <h2>Networking Notes</h2>
+        </div>
+      </div>
+      <!-- Pages built by JS -->
+    </div>
+    <div class="swipe-hint">← swipe to turn pages →</div>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <button class="btn" id="prevBtn" disabled>
+      <span>‹</span> Prev
+    </button>
+    <div class="page-indicator" id="pageIndicator">1 / 19</div>
+    <button class="btn" id="nextBtn">
+      Next <span>›</span>
+    </button>
+  </div>
+  <div class="controls" style="padding-top:0;">
+    <div class="progress-bar" id="progressBar"></div>
+  </div>
+
+  <script>
+    /* ── Page Data ─────────────────────────────────────
+       Each entry is either:
+         { type: 'image', src: '...' }       — a note image page
+         { type: 'title', heading: '...' }    — a section title page
+    ──────────────────────────────────────────────────── */
+    const PAGE_DATA = [
+      // ─── Section 1: Office Network ───
+      { type: 'title', heading: 'Office Network' },
+      { type: 'image', src: './office netwrok/notes.png' },
+
+      // ─── Section 2: VLAN, Trunk, NAT and Access Point ───
+      { type: 'title', heading: 'VLAN, Trunk, NAT\n& Access Point' },
+      { type: 'image', src: './Vlan,trunk,NAT and Access point/notes.png' },
+
+      // ─── Section 3: IP, Subnet and Gateway ───
+      { type: 'title', heading: 'IP, Subnet\n& Gateway' },
+      { type: 'image', src: './IP,Subnet and gateways/pg 1.png' },
+      { type: 'image', src: './IP,Subnet and gateways/pg 2.png' },
+      { type: 'image', src: './IP,Subnet and gateways/pg 3.png' },
+      { type: 'image', src: './IP,Subnet and gateways/pg 4.png' },
+      { type: 'image', src: './IP,Subnet and gateways/pg 5.png' },
+      { type: 'image', src: './IP,Subnet and gateways/pg 6.png' },
+      { type: 'image', src: './IP,Subnet and gateways/pg 7.png' },
+      { type: 'image', src: './IP,Subnet and gateways/pg 8.png' },
+      { type: 'image', src: './IP,Subnet and gateways/pg 9.png' },
+      { type: 'image', src: './IP,Subnet and gateways/pg 10.png' },
+      { type: 'image', src: './IP,Subnet and gateways/pg 11.png' },
+      { type: 'image', src: './IP,Subnet and gateways/pg 12.png' },
+      { type: 'image', src: './IP,Subnet and gateways/pg 13.png' },
+      { type: 'image', src: './IP,Subnet and gateways/pg 14.png' },
+    ];
+
+    const TOTAL_PAGES = PAGE_DATA.length;
+    const pages = [];
+    let currentSpread = 0;
+    let totalSpreads;
+    let isMobile = window.innerWidth <= 680;
+
+    /* ── Create a face element (image or title) ──────── */
+    function createFaceContent(entry, faceEl) {
+      if (entry.type === 'image') {
+        const img = document.createElement('img');
+        img.src = entry.src;
+        img.alt = 'Notes';
+        img.loading = 'lazy';
+        faceEl.appendChild(img);
+      } else if (entry.type === 'title') {
+        faceEl.classList.add('section-title-face');
+        const wrapper = document.createElement('div');
+        const h = document.createElement('div');
+        h.className = 'section-heading';
+        h.textContent = entry.heading;
+        // Replace \n with <br>
+        h.innerHTML = entry.heading.replace(/\n/g, '<br>');
+        wrapper.appendChild(h);
+        const divider = document.createElement('div');
+        divider.className = 'section-divider';
+        wrapper.appendChild(divider);
+        faceEl.appendChild(wrapper);
+      }
+    }
+
+    /* ── Build Pages ────────────────────────────────── */
+    function buildBook() {
+      const book = document.getElementById('book');
+      book.querySelectorAll('.page').forEach(p => p.remove());
+
+      if (isMobile) {
+        buildMobileBook(book);
+      } else {
+        buildDesktopBook(book);
+      }
+      updateControls();
+      buildDots();
+    }
+
+    /* ── Desktop: paired pages ─────────────────────── */
+    function buildDesktopBook(book) {
+      pages.length = 0;
+      const leafCount = Math.ceil(TOTAL_PAGES / 2);
+      totalSpreads = leafCount;
+
+      for (let i = 0; i < leafCount; i++) {
+        const frontIdx = i * 2;       // 0, 2, 4 …
+        const backIdx = i * 2 + 1;    // 1, 3, 5 …
+
+        const page = document.createElement('div');
+        page.className = 'page';
+        page.style.zIndex = leafCount - i;
+        page.dataset.index = i;
+
+        // Front face
+        const front = document.createElement('div');
+        front.className = 'page-face page-front';
+        if (frontIdx < TOTAL_PAGES) {
+          createFaceContent(PAGE_DATA[frontIdx], front);
+          if (i < 2 && PAGE_DATA[frontIdx].type === 'image') {
+            front.querySelector('img').loading = 'eager';
+          }
+        }
+
+        // Back face
+        const back = document.createElement('div');
+        back.className = 'page-face page-back';
+        if (backIdx < TOTAL_PAGES) {
+          createFaceContent(PAGE_DATA[backIdx], back);
+        }
+
+        page.appendChild(front);
+        page.appendChild(back);
+        book.appendChild(page);
+        pages.push(page);
+
+        page.addEventListener('click', () => {
+          if (page.classList.contains('flipped')) {
+            goToSpread(parseInt(page.dataset.index));
+          } else {
+            goToSpread(parseInt(page.dataset.index) + 1);
+          }
+        });
+      }
+
+      currentSpread = 0;
+      applyFlipState();
+    }
+
+    /* ── Mobile: single-page swipe ─────────────────── */
+    function buildMobileBook(book) {
+      pages.length = 0;
+      totalSpreads = TOTAL_PAGES;
+
+      for (let i = 0; i < TOTAL_PAGES; i++) {
+        const page = document.createElement('div');
+        page.className = 'page';
+        page.style.zIndex = TOTAL_PAGES - i;
+        page.dataset.index = i;
+        page.style.width = '100%';
+        page.style.left = '0';
+        page.style.transformOrigin = 'left center';
+
+        const front = document.createElement('div');
+        front.className = 'page-face page-front';
+        front.style.borderRadius = '8px';
+        createFaceContent(PAGE_DATA[i], front);
+        if (i < 2 && PAGE_DATA[i].type === 'image') {
+          front.querySelector('img').loading = 'eager';
+        }
+
+        // Empty back
+        const back = document.createElement('div');
+        back.className = 'page-face page-back';
+        back.style.borderRadius = '8px';
+        back.style.background = '#ebe5d9';
+
+        page.appendChild(front);
+        page.appendChild(back);
+        book.appendChild(page);
+        pages.push(page);
+
+        page.addEventListener('click', () => {
+          if (page.classList.contains('flipped')) {
+            goToSpread(parseInt(page.dataset.index));
+          } else {
+            goToSpread(parseInt(page.dataset.index) + 1);
+          }
+        });
+      }
+
+      currentSpread = 0;
+      applyFlipState();
+    }
+
+    /* ── Flip Logic ────────────────────────────────── */
+    function applyFlipState() {
+      pages.forEach((page, i) => {
+        if (i < currentSpread) {
+          page.classList.add('flipped');
+          page.style.zIndex = i + 1;
+        } else {
+          page.classList.remove('flipped');
+          page.style.zIndex = pages.length - i;
+        }
+      });
+    }
+
+    function goToSpread(s) {
+      if (s < 0 || s > pages.length) return;
+      currentSpread = s;
+      applyFlipState();
+      updateControls();
+      updateDots();
+    }
+
+    /* ── Controls ──────────────────────────────────── */
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const indicator = document.getElementById('pageIndicator');
+
+    prevBtn.addEventListener('click', () => goToSpread(currentSpread - 1));
+    nextBtn.addEventListener('click', () => goToSpread(currentSpread + 1));
+
+    function updateControls() {
+      prevBtn.disabled = currentSpread <= 0;
+      nextBtn.disabled = currentSpread >= pages.length;
+
+      if (isMobile) {
+        const pg = Math.min(currentSpread + 1, TOTAL_PAGES);
+        indicator.textContent = `${pg} / ${TOTAL_PAGES}`;
+      } else {
+        const leftPg = currentSpread * 2;
+        const rightPg = currentSpread * 2 + 1;
+        if (currentSpread === 0) {
+          indicator.textContent = `Cover · 1 / ${TOTAL_PAGES}`;
+        } else if (rightPg > TOTAL_PAGES) {
+          indicator.textContent = `${leftPg} / ${TOTAL_PAGES}`;
+        } else {
+          indicator.textContent = `${leftPg}–${rightPg} / ${TOTAL_PAGES}`;
+        }
+      }
+    }
+
+    /* ── Progress Dots ─────────────────────────────── */
+    const progressBar = document.getElementById('progressBar');
+
+    // Which page indices are section title pages
+    const sectionIndices = new Set();
+    PAGE_DATA.forEach((p, i) => { if (p.type === 'title') sectionIndices.add(i); });
+
+    function buildDots() {
+      progressBar.innerHTML = '';
+      for (let i = 0; i <= pages.length; i++) {
+        const dot = document.createElement('div');
+        // Check if this spread starts with a section title
+        let isSection = false;
+        if (isMobile) {
+          isSection = sectionIndices.has(i);
+        } else {
+          isSection = sectionIndices.has(i * 2) || sectionIndices.has(i * 2 + 1);
+        }
+        dot.className = 'dot' + (i === currentSpread ? ' active' : '') + (isSection ? ' section-marker' : '');
+        dot.addEventListener('click', () => goToSpread(i));
+        progressBar.appendChild(dot);
+      }
+    }
+
+    function updateDots() {
+      const dots = progressBar.querySelectorAll('.dot');
+      dots.forEach((d, i) => d.classList.toggle('active', i === currentSpread));
+    }
+
+    /* ── Keyboard ──────────────────────────────────── */
+    document.addEventListener('keydown', e => {
+      if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); goToSpread(currentSpread + 1); }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); goToSpread(currentSpread - 1); }
+    });
+
+    /* ── Touch / Swipe ─────────────────────────────── */
+    let touchStartX = 0;
+    const bookScene = document.getElementById('bookScene');
+    bookScene.addEventListener('touchstart', e => {
+      touchStartX = e.changedTouches[0].clientX;
+    }, { passive: true });
+    bookScene.addEventListener('touchend', e => {
+      const dx = e.changedTouches[0].clientX - touchStartX;
+      if (Math.abs(dx) > 40) {
+        if (dx < 0) goToSpread(currentSpread + 1);
+        else goToSpread(currentSpread - 1);
+      }
+    }, { passive: true });
+
+    /* ── Sizing ────────────────────────────────────── */
+    function sizeBook() {
+      const scene = document.getElementById('bookScene');
+      const book = document.getElementById('book');
+      const wasM = isMobile;
+      isMobile = window.innerWidth <= 680;
+
+      const pad = isMobile ? 16 : 40;
+      const availW = scene.clientWidth - pad;
+      const availH = scene.clientHeight - pad;
+
+      if (isMobile) {
+        const aspect = 3 / 4;
+        let w = availW;
+        let h = w / aspect;
+        if (h > availH) { h = availH; w = h * aspect; }
+        book.style.width = w + 'px';
+        book.style.height = h + 'px';
+      } else {
+        const aspect = 3 / 4;
+        const halfW = availW / 2;
+        let pageW = halfW;
+        let pageH = pageW / aspect;
+        if (pageH > availH) { pageH = availH; pageW = pageH * aspect; }
+        book.style.width = (pageW * 2) + 'px';
+        book.style.height = pageH + 'px';
+      }
+
+      if (wasM !== isMobile) buildBook();
+    }
+
+    /* ── Init ──────────────────────────────────────── */
+    window.addEventListener('resize', () => { sizeBook(); });
+
+    function init() {
+      sizeBook();
+      buildBook();
+      // Preload first image
+      const firstImg = PAGE_DATA.find(p => p.type === 'image');
+      if (firstImg) {
+        const img = new Image();
+        img.onload = img.onerror = () => {
+          document.getElementById('loader').classList.add('hidden');
+        };
+        img.src = firstImg.src;
+      }
+      setTimeout(() => document.getElementById('loader').classList.add('hidden'), 3000);
+    }
+
+    init();
+  </script>
+</body>
+
+</html>
