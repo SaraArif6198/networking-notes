@@ -397,34 +397,7 @@
       }
     }
 
-    /* ── Swipe hint (mobile) ───────────────────────────── */
-    .swipe-hint {
-      display: none;
-      position: absolute;
-      bottom: 8px;
-      right: 16px;
-      font-size: .65rem;
-      color: #a0927e;
-      z-index: 10;
-      animation: fadeHint 3s ease-in-out forwards;
-    }
 
-    @media (max-width: 680px) {
-      .swipe-hint {
-        display: block;
-      }
-    }
-
-    @keyframes fadeHint {
-      0%,
-      70% {
-        opacity: 1;
-      }
-
-      100% {
-        opacity: 0;
-      }
-    }
   </style>
 </head>
 
@@ -453,7 +426,7 @@
       </div>
       <!-- Pages built by JS -->
     </div>
-    <div class="swipe-hint">← swipe to turn pages →</div>
+
   </div>
 
   <!-- Controls -->
@@ -727,19 +700,7 @@
       if (e.key === 'ArrowLeft') { e.preventDefault(); goToSpread(currentSpread - 1); }
     });
 
-    /* ── Touch / Swipe ─────────────────────────────── */
-    let touchStartX = 0;
-    const bookScene = document.getElementById('bookScene');
-    bookScene.addEventListener('touchstart', e => {
-      touchStartX = e.changedTouches[0].clientX;
-    }, { passive: true });
-    bookScene.addEventListener('touchend', e => {
-      const dx = e.changedTouches[0].clientX - touchStartX;
-      if (Math.abs(dx) > 40) {
-        if (dx < 0) goToSpread(currentSpread + 1);
-        else goToSpread(currentSpread - 1);
-      }
-    }, { passive: true });
+
 
     /* ── Sizing ────────────────────────────────────── */
     function sizeBook() {
