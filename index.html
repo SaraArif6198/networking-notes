@@ -602,14 +602,6 @@
         page.appendChild(back);
         book.appendChild(page);
         pages.push(page);
-
-        page.addEventListener('click', () => {
-          if (page.classList.contains('flipped')) {
-            goToSpread(parseInt(page.dataset.index));
-          } else {
-            goToSpread(parseInt(page.dataset.index) + 1);
-          }
-        });
       }
 
       currentSpread = 0;
